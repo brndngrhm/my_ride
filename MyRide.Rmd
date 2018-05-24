@@ -1,0 +1,428 @@
+---
+title: " "
+output: 
+  flexdashboard::flex_dashboard:
+    vertical_layout: fill
+    orientation: rows
+    horizontal_layout: scroll
+    source_code: embed
+    logo: media/new_logo.png
+    theme: lumen
+    navbar:
+      - { icon: "fa-github", href: "https://github.com/brndngrhm/my_ride", align: right}
+runtime: shiny
+---
+
+<style>   
+
+.navbar {
+  background-color:#272822;
+  border-color:#f92672;
+}
+
+</style> 
+
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(lubridate)
+library(stringr)
+library(tidyr)
+library(changepoint)
+library(zoo)
+library(flexdashboard)
+library(highcharter)
+library(shiny)
+library(leaflet)
+library(XML) 
+```
+
+Ride Data 
+======================================================================
+
+Sidebar {.sidebar}
+----------------------------
+
+```{r sidebar}
+
+#increase max file size allowed 
+options(shiny.maxRequestSize=30*1024^2) 
+
+radioButtons(inputId = "power_select",
+             label = h3("First - Did you have a power meter on this ride?"), 
+             choices = c("Yes", "No"),
+             selected = "Yes")
+
+fileInput(inputId = "file_upload", 
+          label = h3("Next, upload a TCX file and wait a little..."),
+          multiple = FALSE,
+          accept = c(".tcx"),
+          placeholder = "feed me a .tcx file")
+
+radioButtons(inputId = "measure_select",
+             label = h3("Then choose what you want to see"), 
+             choices = c("Power", "Heart_Rate", "Cadence", "Speed"),
+             selected = "Power")
+
+sliderInput(inputId = "slider_select",
+            label = h3("If the blue line isn't lining up with your intervals, adjust the slider (See 'About' Tab for more info)"),
+            min = 0, 
+            max = 50,
+            value = 15, 
+            step = 1)
+
+```
+
+----------------------------
+
+[How to download a .tcx file from Garmin Connect](https://support.strava.com/hc/en-us/articles/216917807-Exporting-files-from-Garmin-Connect)
+
+[How to download a .tcx file from Strava](https://support.strava.com/hc/en-us/articles/216918437-Exporting-your-Data-and-Bulk-Export#TCX)
+
+
+```{r load_data, eval = T}
+
+rides_data <- shiny::reactive({
+  
+  validate(need(input$file_upload != "", "Upload a .tcx file. Then wait..."))
+
+  #rename user-uploaded file
+  infile <- input$file_upload
+  
+  #Read in XML file - try this soon https://hopstat.wordpress.com/2014/01/14/faster-xml-conversion-to-data-frames/
+  garmin_file <- XML::xmlParse(infile$datapath)
+
+  #function check what columns exist, if missing, add them and fill with 0 
+  col_check <- function(data, cname) {
+    
+    add <- cname[!cname%in%names(data)]
+    
+    if(length(add)!=0) data[add] <- 0
+    
+    data
+  }
+
+  #Do different things depending on if Power is included in XML
+  if(input$power_select == "Yes"){
+  
+      #parse XML
+      nodes <- XML::getNodeSet(garmin_file, "//ns:Trackpoint", "ns")
+      rows <- lapply(nodes, function(x) data.frame(xmlToList(x)))
+      ride <- plyr::ldply(rows, data.frame)
+      
+      #vector of expected column names from Garmin with Power XML
+      garmin_power_raw_names <- c("Time", "Position.LatitudeDegrees", "Position.LongitudeDegrees", "AltitudeMeters", "DistanceMeters", "Value", "Cadence",
+                                  "Extensions.TPX.Speed", "Extensions.TPX.Watts", "Speed")
+      
+      #run column check function
+      ride <- col_check(ride, garmin_power_raw_names)
+      
+      #gloablly replace NA with 0 
+      ride[is.na(ride)] <- 0
+      
+      #format the uploaded file
+      ride %>%
+        dplyr::rename("time" = Time,
+                       "longitude" = Position.LongitudeDegrees,
+                       "latitude" = Position.LatitudeDegrees,
+                       "altitude" = AltitudeMeters,
+                       "distance" = DistanceMeters,
+                       "heart_rate" = Value,
+                       "cadence" = Cadence,
+                       "speed" = Extensions.TPX.Speed,
+                       "watts" = Extensions.TPX.Watts,
+                       "speed2" = Speed) %>%
+        dplyr::mutate(time = lubridate::ymd_hms(ride$Time, tz = "EST"),
+                       longitude = as.numeric(as.character(longitude)),
+                       latitude = as.numeric(as.character(latitude)),
+                       altitude = as.numeric(as.character(altitude))*3.28084,
+                       distance = as.numeric(as.character(distance))*0.000621371,
+                       heart_rate = as.numeric(as.character(heart_rate)),
+                       cadence = as.numeric(as.character(cadence)),
+                       speed = as.numeric(as.character(speed))*2.23694,
+                       watts = as.numeric(as.character(watts))
+                     ) %>%
+        dplyr::select(-speed2)
+      
+  }
+  
+  else {
+      
+      #parse XML  
+      nodes <- XML::getNodeSet(garmin_file, "//ns:Trackpoint", "ns")
+      ride <- XML::xmlToDataFrame(nodes)
+      
+      #vector of expected column names from Garmin with Power XML
+      garmin_nopower_raw_names <- c("Time", "Position", "AltitudeMeters", "DistanceMeters", "HeartRateBpm", "Extensions", "Cadence")
+      
+      #run column check function
+      ride <- col_check(ride, garmin_nopower_raw_names)
+      
+      #gloablly replace NA with 0 
+      ride[is.na(ride)] <- 0
+      
+      #format the uploaded file
+      ride %>%
+        tidyr::separate(Position, into = c("latitude", "longitude"), sep="-") %>%
+        dplyr::mutate(longitude = -1*as.numeric(longitude)) %>%
+        dplyr::rename("time" = Time,
+                       "altitude" = AltitudeMeters,
+                       "distance" = DistanceMeters,
+                       "heart_rate" = HeartRateBpm,
+                       "cadence" = Cadence,
+                       "speed" = Extensions) %>%
+        dplyr::mutate(time = lubridate::ymd_hms(ride$Time, tz = "EST"),
+                       longitude = as.numeric(as.character(longitude)),
+                       latitude = as.numeric(as.character(latitude)),
+                       altitude = as.numeric(as.character(altitude))*3.28084,
+                       distance = as.numeric(as.character(distance))*0.000621371,
+                       heart_rate = as.numeric(as.character(heart_rate)),
+                       cadence = as.numeric(as.character(cadence)),
+                       speed = as.numeric(as.character(speed))*2.23694,
+                       watts = 0
+                     )
+  }
+    
+
+})
+
+```
+
+Row {.tabset}
+------------
+### **Ride Info**
+```{r prep_data_for_plot}
+
+plot_data <- reactive({
+
+  #this is used later on to select only relevant columns
+  vars <- c("time", input$measure_select)
+  
+  #get data ready for plotting
+  rides_data_new <- rides_data() %>%
+    dplyr::rename("Distance" = distance,
+                  "Heart_Rate" = heart_rate,
+                  "Speed" = speed,
+                  "Cadence" = cadence,
+                  "Power" = watts) %>% 
+    dplyr::select(one_of(vars)) %>%
+    dplyr::rename_(value = names(.)[2]) %>%
+    dplyr::mutate(day_min = floor_date(time, "minute")) %>%
+    dplyr::group_by(day_min) %>%
+    dplyr::summarise(avg = mean(value, na.rm = T)) %>%
+    dplyr::mutate(count = 1,
+                  ride_min = cumsum(count),
+                  y_label = case_when(input$measure_select == "Power" ~ "WATTS",
+                                      input$measure_select == "Heart_Rate" ~ "BPM",
+                                      input$measure_select == "Cadence" ~ "RPM",
+                                      input$measure_select == "Distance" ~ "MILES",
+                                      TRUE ~ "MPH")) %>%
+    as.data.frame(.)
+  
+  #changepoint analysis - http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/RK-CptWorkshop.html
+  cp_mean <- cpt.mean(rides_data_new$avg,
+                         test.stat='Normal',
+                         method='BinSeg',
+                         Q=input$slider_select,
+                         penalty="SIC")
+  
+  #store breakpoints in a dataframe
+  changepoints <- data.frame("ride_min" = cpts(cp_mean),
+                             changes = seq(1, length(cpts(cp_mean)), 1))
+  
+  #join breakpoints to formatted data, fill in the gaps using Zoo::na.locf
+  rides_data_new <- left_join(rides_data_new, changepoints, by = "ride_min")
+  rides_data_new$id_temp <- rides_data_new$changes
+  rides_data_new$id_temp[rides_data_new$ride_min > subset(rides_data_new$ride_min, rides_data_new$changes == max(rides_data_new$changes, na.rm = T))] <- 100
+  rides_data_new$id <- zoo::na.locf(rides_data_new$id_temp, fromLast = T)
+
+  #calculate the mean within each segment, as identified by the changepoints
+  changepoint_mean <- rides_data_new %>%
+    group_by(id) %>%
+    summarise(mean = mean(avg))
+  
+  #join mean back to dataframe
+  left_join(rides_data_new, changepoint_mean, by = "id" )
+
+})
+
+# vars_test <- c("time", "Power")
+# 
+# test <- ride2 %>%
+#   dplyr::rename("Distance" = distance,
+#                 "Heart_Rate" = heart_rate,
+#                 "Speed" = speed,
+#                 "Cadence" = cadence,
+#                 "Power" = watts) %>%
+#   dplyr::select(one_of(vars_test)) %>%
+#   dplyr::rename_(value = names(.)[2]) %>%
+#   #dplyr::mutate(ride_min = seq(1, nrow(.),1)) %>%
+#   dplyr::mutate(day_min = lubridate::floor_date(time, "minute")) %>%
+#   dplyr::group_by(day_min) %>%
+#   dplyr::summarise(avg = mean(value, na.rm = T)) %>%
+#   dplyr::mutate(count = 1,
+#                 ride_min = cumsum(count)) %>%
+#   #dplyr::select(-count) %>%
+#   as.data.frame(.)
+
+
+```
+
+```{r main_plot, eval = T}
+
+
+renderHighchart({
+
+  #Main Plot 
+  hchart(plot_data(), "line", hcaes(x=ride_min, y=round(avg,0)), color = "#A6E22E",showInLegend = F, name = input$measure_select) %>%
+    hc_add_series(plot_data(), "line", hcaes(x=cumsum(count), y=round(mean)), color = "#1E90FF",  showInLegend = T, name = "Region Average") %>%
+    hc_add_theme(hc_theme_monokai()) %>%
+    hc_tooltip(shared = T) %>%
+    hc_title(text = input$measure_select,
+             align = "left") %>%
+    hc_subtitle(text = if(input$measure_select == "Distance"){paste("Total Distance:", max(round(plot_data()$avg,0)), sep=" ")}
+                         else{paste("Overall Mean:", round(mean(plot_data()$avg),2), sep=" ")},
+             align = "left") %>%
+    hc_xAxis(title = list(text = "Minutes into Ride"))%>%
+    hc_yAxis(title = list(text = unique(plot_data()$y_label))) %>%
+    hc_chart(zoomType = "x")
+
+})
+```
+
+### **Overlay**
+```{r overlay_plot}
+
+overlay_data <- reactive({
+
+rides_data()  %>%
+    dplyr::mutate(day_min = floor_date(time, "minute")) %>%
+    dplyr::group_by(day_min) %>%
+    dplyr::summarise(heart_rate_avg = mean(heart_rate, na.rm = T),
+                     speed_avg = mean(speed, na.rm = T),
+                     cadence_avg = mean(cadence, na.rm = T),
+                     watts_avg = mean(watts, na.rm = T)) %>%
+    dplyr::mutate(count = 1,
+                  ride_min = cumsum(count)) %>%
+    as.data.frame(.)
+
+})
+
+renderHighchart({
+
+    hchart(overlay_data(), "line", hcaes(x=ride_min, y=round(heart_rate_avg,0)), showInLegend = T, name = "Heart_Rate") %>%
+    hc_add_series(overlay_data(), "line", hcaes(x=ride_min, y=round(watts_avg,0)),showInLegend = T, name = "Power", color = "#a2a39c") %>%
+    hc_add_series(overlay_data(), "line", hcaes(x=ride_min, y=round(speed_avg,0)),showInLegend = T, name = "Speed") %>%
+    hc_add_series(overlay_data(), "line", hcaes(x=ride_min, y=round(cadence_avg,0)),showInLegend = T, name = "Cadence") %>%
+    hc_add_theme(hc_theme_monokai()) %>%
+    hc_tooltip(shared = T) %>%
+    hc_title(text = "Comparison",
+             align = "left") %>%
+    hc_xAxis(title = list(text = "Minutes into Ride"))%>%
+    hc_yAxis(title = list(text = " ")) %>%
+    hc_chart(zoomType = "x")
+  
+  
+})
+
+```
+
+<style>
+
+  .about {
+    font-family: font-family: Arial, Helvetica, sans-serif;
+    font-size: 18px;
+    
+  }
+
+</style>
+
+### **About** {.about}
+
+#### **What is this app for? Why should I use this instead of something like Strava, Training Peaks, or Garmin Connect?**  
+The free versions of these apps aren't very helpful for analyzing intervals. While they can tell you your overall average power, heart rate or cadence for a ride it's harder if not impossible to get at the average *during an interval or hard effort*, which is probably what you care about more so than the overall average. **This app automatically identifies interval efforts and displays the average power, heart rate, cadence, or speed in these intervals.**
+<br>  
+
+#### **How do I use the chart? What are the green and blue lines telling me?**  
+Let's say you want to analyze your power during a recent training ride. You upload a file, and select "Power" and a chart appears. The Green Line is showing you your average power at each minute of your ride. The Blue Line is detects changes in your effort and tells you the average power within each detected change point. It is a result of a [changepoint detection algorithm](http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/RK-CptWorkshop.html), the sensitivity of which you can control with the slider in the sidebar.
+<br>  
+
+#### **Ok but what if the Blue Line isn't lining up with my intervals?**
+The Blue Line tries to detect changes automatically, but can sometimes miss them. The good news is you can adjust the number of changepoints to search for with the slider - the lower the number the less sensitive and the higher the number the more sensitive it becomes. The goal is to strike a balance, where the blue line changes in step with your your intervals but doesn't change *too much* to the point where it reacts to every small fluctuation within an interval. Usually setting it somewhere between 10 and 20 should do the trick.
+<br>  
+
+#### **Why do I need to specify if I used a power meter or not??**
+The .tcx files are structured differently when you use a power meter than when you don't. You have to select the Yes or No so the app processes the data correctly. 
+<br>  
+
+#### **Why do I need to upload a file at all? Why can't this connect to Strava or Garmin Connect??**
+This might be possible in the future! Currently I don't know how to extract anything other than ride summary statistics from Strava and Garmin Connect's API has an insane fee of $5,000.
+
+[How to download a .tcx file from Garmin Connect](https://support.strava.com/hc/en-us/articles/216917807-Exporting-files-from-Garmin-Connect)
+
+[How to download a .tcx file from Strava](https://support.strava.com/hc/en-us/articles/216918437-Exporting-your-Data-and-Bulk-Export#TCX)
+
+
+
+Row
+-------------
+### Distribution
+```{r histogram}
+
+#set up data for histogram
+hist_data <- reactive ({
+  
+  #this is used below to select only relevant columns
+  vars <- c("time", input$measure_select)
+  
+  #format data
+  rides_data() %>%
+    dplyr::rename("Distance" = distance,
+                  "Heart_Rate" = heart_rate,
+                  "Speed" = speed,
+                  "Cadence" = cadence,
+                  "Power" = watts) %>% 
+    dplyr::select(one_of(vars)) %>%
+    dplyr::rename_(value = names(.)[2]) %>%
+    dplyr::mutate(x_label = case_when(input$measure_select == "Power" ~ "WATTS",
+                                      input$measure_select == "Heart_Rate" ~ "BPM",
+                                      input$measure_select == "Cadence" ~ "RPM",
+                                      input$measure_select == "Distance" ~ "MILES",
+                                      TRUE ~ "MPH"))
+
+})
+
+#histogram for selected measure
+renderHighchart({
+
+hchart(hist_data()$value) %>%
+    hc_add_theme(hc_theme_monokai()) %>%
+    hc_title(text = input$measure_select,
+             align = "left") %>%
+    hc_xAxis(title = list(text = unique(hist_data()$x_label)))  %>%
+    hc_legend(enabled = FALSE)
+  
+})
+
+```
+
+### Map
+```{r map}
+
+#ride map
+renderLeaflet({
+
+leaflet(rides_data()) %>%  
+  addProviderTiles(providers$CartoDB.DarkMatter) %>%
+  setView(lng = mean(rides_data()$longitude, na.rm = T), 
+          lat = mean(rides_data()$latitude, na.rm = T), 
+          zoom = 13) %>% 
+  leaflet::addPolylines(~longitude, 
+                        ~latitude,
+                        weight = 4, 
+                        color = "#A6E22E",
+                        stroke = TRUE, 
+                        fillOpacity = 0)
+})
+
+```
