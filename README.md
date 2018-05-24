@@ -1,4 +1,4 @@
-### **About**
+### **About MyRide**
 
 #### **What is this app for? Why should I use this instead of something like Strava, Training Peaks, or Garmin Connect?**  
 The free versions of these apps aren't very helpful for analyzing intervals. While they can tell you your overall average power, heart rate or cadence for a ride it's harder if not impossible to get at the average *during an interval or hard effort*, which is probably what you care about more so than the overall average. **This app automatically identifies interval efforts and displays the average power, heart rate, cadence, or speed in these intervals.**
