@@ -62,7 +62,7 @@ fileInput(inputId = "file_upload",
 radioButtons(inputId = "measure_select",
              label = h3("Then choose what you want to see"), 
              choices = c("Power", "Heart_Rate", "Cadence", "Speed"),
-             selected = "Power")
+             selected = "Heart_Rate")
 
 sliderInput(inputId = "slider_select",
             label = h3("If the blue line isn't lining up with your intervals, adjust the slider (See 'About' Tab for more info)"),
@@ -416,7 +416,7 @@ leaflet(rides_data()) %>%
   addProviderTiles(providers$CartoDB.DarkMatter) %>%
   setView(lng = mean(rides_data()$longitude, na.rm = T), 
           lat = mean(rides_data()$latitude, na.rm = T), 
-          zoom = 13) %>% 
+          zoom = 11) %>% 
   leaflet::addPolylines(~longitude, 
                         ~latitude,
                         weight = 4, 
