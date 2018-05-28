@@ -224,8 +224,11 @@ plot_data <- reactive({
   #gloablly replace NaN with 0 
   is.nan.data.frame <- function(x) do.call(cbind, lapply(x, is.nan))
   rides_data_new[is.nan(rides_data_new)] <- 0
+
   
-  if(sum(rides_data_new$avg) <= 0) stop("No Data :(")
+    validate(
+      need(sum(rides_data_new$avg) > 0, paste("There's no", input$measure_select, "data to plot :( Please select another option on the sidebar", sep=" "))
+    )
   
   #changepoint analysis - http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/RK-CptWorkshop.html
   cp_mean <- cpt.mean(rides_data_new$avg,
@@ -403,7 +406,10 @@ hist_data <- reactive ({
 #histogram for selected measure
 renderHighchart({
   
-  if(sum(hist_data()$value) <=0) stop("No Data :(")
+    validate(
+      need(sum(hist_data()$value) > 0, paste("There's no", input$measure_select, "data to plot :( Please select another option on the sidebar", sep=" "))
+    )
+  
   
   hchart(hist_data()$value) %>%
       hc_add_theme(hc_theme_monokai()) %>%
