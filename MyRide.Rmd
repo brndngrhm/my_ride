@@ -61,13 +61,13 @@ fileInput(inputId = "file_upload",
 
 radioButtons(inputId = "measure_select",
              label = h3("Then choose what you want to see"), 
-             choices = c("Power", "Heart_Rate", "Cadence", "Speed"),
+             choices = c("Heart_Rate", "Power", "Cadence", "Speed"),
              selected = "Heart_Rate")
 
 sliderInput(inputId = "slider_select",
             label = h3("If the blue line isn't lining up with your intervals, adjust the slider (See 'About' Tab for more info)"),
             min = 0, 
-            max = 50,
+            max = 35,
             value = 15, 
             step = 1)
 
@@ -91,6 +91,7 @@ rides_data <- shiny::reactive({
   
   #Read in XML file - try this soon https://hopstat.wordpress.com/2014/01/14/faster-xml-conversion-to-data-frames/
   garmin_file <- XML::xmlParse(infile$datapath)
+  #garmin_file <- XML::xmlParse("meesh_today.tcx")
 
   #function check what columns exist, if missing, add them and fill with 0 
   col_check <- function(data, cname) {
@@ -118,7 +119,7 @@ rides_data <- shiny::reactive({
       ride <- col_check(ride, garmin_power_raw_names)
       
       #gloablly replace NA with 0 
-      ride[is.na(ride)] <- 0
+      ride[is.na(ride)] <- "0"
       
       #format the uploaded file
       ride %>%
@@ -142,7 +143,7 @@ rides_data <- shiny::reactive({
                        speed = as.numeric(as.character(speed))*2.23694,
                        watts = as.numeric(as.character(watts))
                      ) %>%
-        dplyr::select(-speed2)
+        dplyr::select(-speed2) 
       
   }
   
@@ -218,6 +219,10 @@ plot_data <- reactive({
                                       input$measure_select == "Distance" ~ "MILES",
                                       TRUE ~ "MPH")) %>%
     as.data.frame(.)
+  
+  #gloablly replace NaN with 0 
+  is.nan.data.frame <- function(x) do.call(cbind, lapply(x, is.nan))
+  rides_data_new[is.nan(rides_data_new)] <- 0
   
   #changepoint analysis - http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/RK-CptWorkshop.html
   cp_mean <- cpt.mean(rides_data_new$avg,
