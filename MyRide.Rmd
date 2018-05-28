@@ -91,7 +91,6 @@ rides_data <- shiny::reactive({
   
   #Read in XML file - try this soon https://hopstat.wordpress.com/2014/01/14/faster-xml-conversion-to-data-frames/
   garmin_file <- XML::xmlParse(infile$datapath)
-  #garmin_file <- XML::xmlParse("meesh_today.tcx")
 
   #function check what columns exist, if missing, add them and fill with 0 
   col_check <- function(data, cname) {
@@ -227,7 +226,7 @@ plot_data <- reactive({
 
   
     validate(
-      need(sum(rides_data_new$avg) > 0, paste("There's no", input$measure_select, "data to plot :( Please select another option on the sidebar", sep=" "))
+      need(sum(rides_data_new$avg, na.rm = T) > 0, paste("There's no", input$measure_select, "data to plot :( Please select another option on the sidebar", sep=" "))
     )
   
   #changepoint analysis - http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/RK-CptWorkshop.html
@@ -407,7 +406,7 @@ hist_data <- reactive ({
 renderHighchart({
   
     validate(
-      need(sum(hist_data()$value) > 0, paste("There's no", input$measure_select, "data to plot :( Please select another option on the sidebar", sep=" "))
+      need(sum(hist_data()$value, na.rm = T) > 0, paste("There's no", input$measure_select, "data to plot :( Please select another option on the sidebar", sep=" "))
     )
   
   
