@@ -195,7 +195,8 @@ Row {.tabset}
 ```{r prep_data_for_plot}
 
 plot_data <- reactive({
-
+  
+  
   #this is used later on to select only relevant columns
   vars <- c("time", input$measure_select)
   
@@ -223,6 +224,8 @@ plot_data <- reactive({
   #gloablly replace NaN with 0 
   is.nan.data.frame <- function(x) do.call(cbind, lapply(x, is.nan))
   rides_data_new[is.nan(rides_data_new)] <- 0
+  
+  if(sum(rides_data_new$avg) <= 0) stop("No Data :(")
   
   #changepoint analysis - http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/RK-CptWorkshop.html
   cp_mean <- cpt.mean(rides_data_new$avg,
@@ -399,13 +402,15 @@ hist_data <- reactive ({
 
 #histogram for selected measure
 renderHighchart({
-
-hchart(hist_data()$value) %>%
-    hc_add_theme(hc_theme_monokai()) %>%
-    hc_title(text = input$measure_select,
-             align = "left") %>%
-    hc_xAxis(title = list(text = unique(hist_data()$x_label)))  %>%
-    hc_legend(enabled = FALSE)
+  
+  if(sum(hist_data()$value) <=0) stop("No Data :(")
+  
+  hchart(hist_data()$value) %>%
+      hc_add_theme(hc_theme_monokai()) %>%
+      hc_title(text = input$measure_select,
+               align = "left") %>%
+      hc_xAxis(title = list(text = unique(hist_data()$x_label)))  %>%
+      hc_legend(enabled = FALSE)
   
 })
 
