@@ -37,6 +37,7 @@ library(XML)
 library(xml2)
 library(tidyr)
 library(FITfileR)
+library(imputeTS)
 ```
 
 Ride Data 
@@ -59,7 +60,7 @@ fileInput(inputId = "file_upload",
 radioButtons(inputId = "measure_select",
              label = h3("Then choose what you want to see"), 
              choices = c("heart_rate", "power", "cadence", "speed"),
-             selected = "heart_rate")
+             selected = "power")
 
 sliderInput(inputId = "slider_select",
             label = h3("If the blue line isn't lining up with your intervals, adjust the slider (See 'About' Tab for more info)"),
@@ -92,7 +93,21 @@ parse_fit_file <- function(data){
     
   }
   
-  return(fit_file_df)
+  # checks if col names exist, and if not create it with value 0.
+  expected_cols <- c("timestamp", "position_lat", "position_long", "distance", "accumulated_power", 
+                     "altitude", "speed", "power", "heart_rate", "cadence", "temperature", 
+                     "fractional_cadence")
+  
+  fit_file_df[expected_cols[!(expected_cols %in% colnames(fit_file_df))]] <- 0
+  
+  fit_file_df %>%
+    mutate(heart_rate = ifelse(heart_rate == 255, 0, heart_rate),
+           speed_raw = speed,
+           speed = imputeTS::na_ma(speed_raw, k = 4, weighting = 'simple')* 2.23694,
+           power_raw = power,
+           power_adj = ifelse(power_raw > 1500, NA_real_, power_raw),
+           power = imputeTS::na_ma(power_adj, k = 4, weighting = 'simple')
+    )
   
 }
 
@@ -102,10 +117,10 @@ get_minute_avgs <- function(data){
   fit_file_formatted <- data %>%
     as_tibble() %>%
     mutate(timestamp = ymd_hms(timestamp) - hours(5), 
-           time = floor_date(timestamp, "minute")) %>%
+           time = floor_date(timestamp, "1 second")) %>%
     select(-accumulated_power) %>%
     group_by(time) %>%
-    summarise(across(where(is.numeric), mean, na.rm = T))%>%
+    summarise(across(where(is.numeric), ~mean(.x, na.rm = T))) %>%
     mutate(count = 1,
            ride_min = cumsum(count)
     )
@@ -122,7 +137,6 @@ get_specific_value <- function(data, value){
   data %>%
     select(one_of(vars)) %>% 
     rename(metric_avg = 3)
-
 }
 
 # does changepoint analysis on a variable
@@ -132,22 +146,21 @@ get_changepoints <- function(data, sensitivity){
 cp_mean <- cpt.mean(data$metric_avg,
                     test.stat = 'Normal',
                     method = 'BinSeg',
-                    # Q=input$slider_select,
-                    Q = sensitivity,
+                    Q = input$slider_select,
                     penalty = "SIC")
 
 #store breakpoints in a dataframe
 changepoints <- data.frame("ride_min" = cpts(cp_mean),
                            changes = seq(1, length(cpts(cp_mean)), 1))
 
-#join breakpoints to formatted data, fill in the gaps using Zoo::na.locf
+#join breakpoints to formatted data, fill in the gaps
 data <- left_join(data, changepoints, by = "ride_min") %>%
   tidyr::fill(changes, .direction = "downup") 
 
 #calculate the mean within each segment, as identified by the changepoints
 changepoint_mean <- data %>%
   group_by(changes) %>%
-  summarise(mean = mean(metric_avg))
+  summarise(mean = mean(metric_avg, na.rm = T))
 
 #join mean back to dataframe
 left_join(data, changepoint_mean, by = "changes")
@@ -188,8 +201,16 @@ Row
 
 ```{r main_plot}
 renderHighchart({
+  
+     validate(
+      need(sum(selected_value()$metric_avg, na.rm = T) > 0, 
+           paste("There's no", input$measure_select, "data to plot :( Please select another option on the sidebar", sep=" "))
+    )
+  
   hchart(changes(), "line", hcaes(x = datetime_to_timestamp(time), y=round(metric_avg,0)), color = "#A6E22E",showInLegend = F, name = input$measure_select) %>%
-    hc_add_series(changes(), "line", hcaes(x = datetime_to_timestamp(time), y=round(mean)), color = "#1E90FF",  showInLegend = T, name = "Region Average") %>%
+    hc_add_series(changes(), "line", hcaes(x = datetime_to_timestamp(time), y=round(mean)),
+                  color = "#1E90FF", showInLegend = T, name = "Region Average") %>%
+    # hc_plotOptions("Region Average" = list(lineWidth = 5)) %>%
     hc_add_theme(hc_theme_monokai()) %>%
     hc_tooltip(shared = T) %>%
     hc_title(text = input$measure_select,
