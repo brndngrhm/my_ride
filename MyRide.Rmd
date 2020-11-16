@@ -7,20 +7,23 @@ output:
     horizontal_layout: scroll
     source_code: embed
     logo: media/new_logo.png
-    theme: lumen
+    theme: bootstrap
     navbar:
       - { icon: "fa-github", href: "https://github.com/brndngrhm/my_ride", align: right}
+    css:
+      # - bootstrap_min.css
+      - dark.css
 runtime: shiny
 ---
 
-<style>   
+<!-- <style>    -->
 
-.navbar {
-background-color:#272822;
-border-color:#f92672;
-}
+<!-- .navbar { -->
+<!-- background-color:#272822; -->
+<!-- border-color:#f92672; -->
+<!-- } -->
 
-</style> 
+<!-- </style>  -->
 
 ```{r setup, include=FALSE}
 library(dplyr)
@@ -40,7 +43,7 @@ library(FITfileR)
 library(imputeTS)
 ```
 
-Ride Data 
+Analysis
 ======================================================================
 
 Sidebar {.sidebar}
@@ -52,18 +55,18 @@ Sidebar {.sidebar}
 options(shiny.maxRequestSize=30*1024^2) 
 
 fileInput(inputId = "file_upload", 
-          label = h3("Next, upload a FIT file and wait a little..."),
+          label = h4("Upload a FIT file"),
           multiple = FALSE,
           accept = c(".fit"),
-          placeholder = "feed me a .fit file")
+          placeholder = ".fit format only")
 
 radioButtons(inputId = "measure_select",
-             label = h3("Then choose what you want to see"), 
+             label = h4("Choose what you want to see"), 
              choices = c("heart_rate", "power", "cadence", "speed"),
              selected = "power")
 
 sliderInput(inputId = "slider_select",
-            label = h3("If the blue line isn't lining up with your intervals, adjust the slider (See 'About' Tab for more info)"),
+            label = h4("If the blue line isn't lining up with your intervals, adjust the slider (See 'About' Tab for more info)"),
             min = 0, 
             max = 35,
             value = 15, 
@@ -72,10 +75,6 @@ sliderInput(inputId = "slider_select",
 ```
 
 ----------------------------
-
-[How to download a .tcx file from Garmin Connect](https://support.strava.com/hc/en-us/articles/216917807-Exporting-files-from-Garmin-Connect)
-
-[How to download a .tcx file from Strava](https://support.strava.com/hc/en-us/articles/216918437-Exporting-your-Data-and-Bulk-Export#TCX)
 
 ```{r}
 #sometimes data is read in as multiple records, fomrming a list. in that case we need to bind them together to 1 dataframe
@@ -102,6 +101,8 @@ parse_fit_file <- function(data){
   
   fit_file_df %>%
     mutate(heart_rate = ifelse(heart_rate == 255, 0, heart_rate),
+           cadence_raw = cadence,
+           cadence = imputeTS::na_ma(cadence_raw, k = 4, weighting = 'simple'),
            speed_raw = speed,
            speed = imputeTS::na_ma(speed_raw, k = 4, weighting = 'simple')* 2.23694,
            power_raw = power,
@@ -142,29 +143,29 @@ get_specific_value <- function(data, value){
 # does changepoint analysis on a variable
 get_changepoints <- function(data, sensitivity){
   
-#changepoint analysis - http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/RK-CptWorkshop.html
-cp_mean <- cpt.mean(data$metric_avg,
-                    test.stat = 'Normal',
-                    method = 'BinSeg',
-                    Q = input$slider_select,
-                    penalty = "SIC")
-
-#store breakpoints in a dataframe
-changepoints <- data.frame("ride_min" = cpts(cp_mean),
-                           changes = seq(1, length(cpts(cp_mean)), 1))
-
-#join breakpoints to formatted data, fill in the gaps
-data <- left_join(data, changepoints, by = "ride_min") %>%
-  tidyr::fill(changes, .direction = "downup") 
-
-#calculate the mean within each segment, as identified by the changepoints
-changepoint_mean <- data %>%
-  group_by(changes) %>%
-  summarise(mean = mean(metric_avg, na.rm = T))
-
-#join mean back to dataframe
-left_join(data, changepoint_mean, by = "changes")
-
+  #changepoint analysis - http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/RK-CptWorkshop.html
+  cp_mean <- cpt.mean(data$metric_avg,
+                      test.stat = 'Normal',
+                      method = 'BinSeg',
+                      Q = input$slider_select,
+                      penalty = "SIC")
+  
+  #store breakpoints in a dataframe
+  changepoints <- data.frame("ride_min" = cpts(cp_mean),
+                             changes = seq(1, length(cpts(cp_mean)), 1))
+  
+  #join breakpoints to formatted data, fill in the gaps
+  data <- left_join(data, changepoints, by = "ride_min") %>%
+    tidyr::fill(changes, .direction = "downup") 
+  
+  #calculate the mean within each segment, as identified by the changepoints
+  changepoint_mean <- data %>%
+    group_by(changes) %>%
+    summarise(mean = mean(metric_avg, na.rm = T))
+  
+  #join mean back to dataframe
+  left_join(data, changepoint_mean, by = "changes")
+  
 }
 
 ###################
@@ -178,8 +179,6 @@ parsed_fit_file <- reactive({
 })
 
 ride_data <- reactive({
-  
-  validate(need(input$file_upload != "", "Upload a .tcx file. Then wait..."))
 
   get_minute_avgs(parsed_fit_file())
   
@@ -191,21 +190,22 @@ selected_value <- reactive({
 
 changes <- reactive({
   get_changepoints(selected_value(), sensitivity = input$slider_select)
-  })
+})
 
 ```
 
 Row 
 ------------
-### **Interval Analyzer**
-
-```{r main_plot}
+### 
+```{r}
 renderHighchart({
   
-     validate(
-      need(sum(selected_value()$metric_avg, na.rm = T) > 0, 
-           paste("There's no", input$measure_select, "data to plot :( Please select another option on the sidebar", sep=" "))
-    )
+  validate(need(input$file_upload != "", "Upload a FIT file - This app displays power, heart rate, cadence, or speed of your ride. If any intervals are detected, this app also displays the average power, heart rate, cadence, or speed in these intervals."))
+  
+  validate(
+    need(sum(selected_value()$metric_avg, na.rm = T) > 0, 
+         paste("There's no", input$measure_select, "data to plot :( Please select another option on the sidebar", sep=" "))
+  )
   
   hchart(changes(), "line", hcaes(x = datetime_to_timestamp(time), y=round(metric_avg,0)), color = "#A6E22E",showInLegend = F, name = input$measure_select) %>%
     hc_add_series(changes(), "line", hcaes(x = datetime_to_timestamp(time), y=round(mean)),
@@ -213,71 +213,79 @@ renderHighchart({
     # hc_plotOptions("Region Average" = list(lineWidth = 5)) %>%
     hc_add_theme(hc_theme_monokai()) %>%
     hc_tooltip(shared = T) %>%
-    hc_title(text = input$measure_select,
+    hc_title(text = paste("Changepoint Analysis:", input$measure_select),
              align = "left") %>%
     hc_subtitle(text = if(input$measure_select == "Distance"){paste("Total Distance:", max(round(changes()$avg,0)), sep=" ")}
-                         else{paste("Overall Mean:", round(mean(changes()$avg),2), sep=" ")},
-             align = "left") %>%
-    hc_xAxis(title = list(text = "Minutes into Ride"))%>%
-    # hc_yAxis(title = list(text = unique(changes()$y_label))) %>%
+                else{paste("Overall Mean:", round(mean(changes()$metric_avg),2), sep=" ")},
+                align = "left") %>%
+    hc_xAxis(title = list(text = "time"),
+             type = "datetime"
+             ) %>% 
     hc_chart(zoomType = "x")
 })
 ```
 
-### **Overlay**
-```{r overlay_plot}
+###
+```{r}
 renderHighchart({
   
+  validate(need(input$file_upload != "", " "))
+  
   my_vars <- c("time", "cadence", "heart_rate", "power", "speed")
+  
+  cols <- c("#66D9EF", "#F92672", '#A6E22E', '#AE81FF')
   
   ride_data() %>%
     select(one_of(my_vars)) %>%
     pivot_longer(cols = 2:ncol(.)) %>%
     hchart(., "line", hcaes(x = datetime_to_timestamp(time), y = round(value,0), group = name), showInLegend = T) %>%
+    hc_colors(cols) %>%
     hc_add_theme(hc_theme_monokai()) %>%
     hc_tooltip(shared = T) %>%
-    hc_title(text = "Comparison",
+    hc_title(text = "Data Overlay",
              align = "left") %>%
-    hc_xAxis(title = list(text = "Minutes into Ride"))%>%
+    hc_xAxis(title = list(text = "time"),
+             type = "datetime"
+    ) %>% 
     hc_yAxis(title = list(text = " ")) %>%
     hc_chart(zoomType = "x")
 })
-
 ```
 
 Row
--------------
+----------
 
-### Distribution
-```{r histogram}
-#histogram for selected measure
+### 
+```{r}
 renderHighchart({
   
-    validate(
-      need(sum(selected_value()$metric_avg, na.rm = T) > 0, 
-           paste("There's no", input$measure_select, "data to plot :( Please select another option on the sidebar", sep=" "))
-    )
-
+  validate(need(input$file_upload != "", " "))
+  
+  validate(
+    need(sum(selected_value()$metric_avg, na.rm = T) > 0, 
+         paste("There's no", input$measure_select, "data to plot :( Please select another option on the sidebar", sep=" "))
+  )
+  
   hchart(selected_value()$metric_avg) %>%
-      hc_add_theme(hc_theme_monokai()) %>%
-      hc_title(text = input$measure_select,
-               align = "left") %>%
-      hc_xAxis(title = list(text =input$measure_select))  %>%
-      hc_legend(enabled = FALSE)
+    hc_add_theme(hc_theme_monokai()) %>%
+    hc_title(text = input$measure_select,
+             align = "left") %>%
+    hc_xAxis(title = list(text =input$measure_select))  %>%
+    hc_legend(enabled = FALSE)
   
 })
 ```
 
-### Map
-```{r map}
-
-#ride map
+###
+```{r}
 renderLeaflet({
   
-   validate(
-      need(sum(ride_data()$position_lat, na.rm = T) > 0, 
-           "There's no GPS data to plot :(")
-    )
+  validate(need(input$file_upload != "", " "))
+  
+  validate(
+    need(sum(ride_data()$position_lat, na.rm = T) > 0, 
+         "There's no GPS data to plot :(")
+  )
   
   coords <- ride_data() %>%
     select(starts_with("position"))
@@ -294,151 +302,31 @@ renderLeaflet({
                           stroke = TRUE, 
                           fillOpacity = 0)
 })
-
 ```
 
-HR Analysis
-======================================================================
-
-Sidebar {.sidebar}
-----------------------------
-```{r hr_sidebar}
-
-#increase max file size allowed 
-options(shiny.maxRequestSize=30*1024^2) 
-
-sliderInput(inputId = "hr_slider_select",
-            label = h3("Adjust Lag"),
-            min = 0, 
-            max = 35,
-            value = 15, 
-            step = 1)
-
-```
-
-Row
---------------------
-
-### Cross Corellation Between Heart Rate and Power
-```{r ccf_plot}
-
-#scatterplot of HR vs power
-
-renderPlot({
-  
-    validate(
-      need(sum(hist_data()$value, na.rm = T) > 0, paste("There's no data to plot!", sep=" "))
-    )
-  
-  hr_data <- rides_data() %>%
-    dplyr::group_by(watts) %>%
-    dplyr::summarise(avg_hr = mean(heart_rate, na.rm = T))
-  
-  #CCF analysis (#interp: HR lags watts most sig at ~ 15 seconds)
-  ccf <- ccf(subset(rides_data()$watts,!is.na(rides_data()$heart_rate)), !is.na(rides_data()$heart_rate),
-             plot = T) 
-  ccf.df <- data.frame(lag = ccf$lag,
-                       acf = ccf$acf)
-  
-  #hchart(ccf)
-  
-  #CCF plot
-  # hchart(ccf.df, type = "column", name = "ACF", hcaes(x = lag, y = round(acf, 2))) %>%
-  #   hc_add_theme(hc_theme_darkunica()) %>%
-  #   hc_tooltip(shared = T) %>%
-  #   hc_title(text = "Cross Corellation Between Watts and Heart Rate",
-  #            align = "left") %>%
-  #   hc_subtitle(text = paste("Interpretation: On this ride, your heart rate lagged power output by about", ccf$lag[ccf$acf == max(ccf$acf)], "seconds", sep = " "),
-  #               align = 'left') %>%
-  #   hc_xAxis(title = list(text = "Lag (in Seconds)"))%>%
-  #   hc_yAxis(title = list(text = "ACF")) %>%
-  #   hc_chart(zoomType = "x")
-  
-})
-```
-
-### Lagged Watts
-```{r lagged_plot}
-
-renderHighchart({
-  
-    validate(
-      need(sum(hist_data()$value, na.rm = T) > 0, paste("There's no data to plot!", sep=" "))
-    )
-  
-#Shift data
-lag <- rides_data() %>%
-  dplyr::mutate(watts_lag = dplyr::lag(watts, n = input$hr_slider_select, default = NA)) %>%
-  dplyr::group_by(watts_lag) %>%
-  dplyr::summarise(avg_lag_hr = mean(heart_rate, na.rm = T))
-
-#LM on lagged data    
-lm_test <- glm(avg_lag_hr ~ watts_lag + I(watts_lag^2) + I(watts_lag^3), data = lag)
-  #summary(lm_test)
-  # plot(lm_test)
-  
-  
-#added model fitted data to dataframe
-estimates <- broom::tidy(lm_test)
-
-lag$fitted <- estimates$estimate[estimates$term == "(Intercept)"] + 
-  estimates$estimate[estimates$term == "watts_lag"]*lag$watts_lag + 
-  estimates$estimate[estimates$term == "I(watts_lag^2)"]*lag$watts_lag^2+ 
-  estimates$estimate[estimates$term == "I(watts_lag^3)"]*lag$watts_lag^3 
-
-#plagged plot with fit line
-hchart(lag, type = "line", name = "Lagged HR", hcaes(x=watts_lag, y=round(avg_lag_hr,2))) %>%
-  hc_add_series(lag, name = "model fit", type = "line", hcaes(x=watts_lag, y=round(fitted,2))) %>%
-  hc_add_theme(hc_theme_monokai()) %>%
-  hc_tooltip(shared = T) %>%
-  hc_title(text = "Lagged Watts vs Heart Rate",
-           align = "left") %>%
-  hc_subtitle(text = paste("Lag =", input$hr_slider_select, "Seconds", sep = " "),
-           align = "left") %>%
-  hc_xAxis(title = list(text = "Watts"))%>%
-  hc_yAxis(title = list(text = "BPM")) %>%
-  hc_chart(zoomType = "x")
-  
-})
-
-```
-
-
-## About
+About
 ======================================================================
 <style>
 
-  .about {
-    font-family: font-family: Arial, Helvetica, sans-serif;
-    font-size: 18px;
-    
-  }
+.about {
+font-family: font-family: Arial, Helvetica, sans-serif;
+font-size: 18px;
+
+}
 
 </style>
 
-### **About** {.about}
-
-#### **What is this app for? Why should I use this instead of something like Strava, Training Peaks, or Garmin Connect?**  
+### **What is this app for? Why should I use this instead of something like Strava, Training Peaks, or Garmin Connect?**
 The free versions of these apps aren't very helpful for analyzing intervals. While they can tell you your overall average power, heart rate or cadence for a ride it's harder if not impossible to get at the average *during an interval or hard effort*, which is probably what you care about more so than the overall average. **This app automatically identifies interval efforts and displays the average power, heart rate, cadence, or speed in these intervals.**
 <br>  
 
-#### **How do I use the chart? What are the green and blue lines telling me?**  
+### **How do I use the chart? What are the green and blue lines telling me?**
 Let's say you want to analyze your power during a recent training ride. You upload a file, and select "Power" and a chart appears. The Green Line is showing you your average power at each minute of your ride. The Blue Line is detects changes in your effort and tells you the average power within each detected change point. It is a result of a [changepoint detection algorithm](http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/RK-CptWorkshop.html), the sensitivity of which you can control with the slider in the sidebar.
 <br>  
 
-#### **Ok but what if the Blue Line isn't lining up with my intervals?**
+### **Ok but what if the Blue Line isn't lining up with my intervals?**
 The Blue Line tries to detect changes automatically, but can sometimes miss them. The good news is you can adjust the number of changepoints to search for with the slider - the lower the number the less sensitive and the higher the number the more sensitive it becomes. The goal is to strike a balance, where the blue line changes in step with your your intervals but doesn't change *too much* to the point where it reacts to every small fluctuation within an interval. Usually setting it somewhere between 10 and 20 should do the trick.
 <br>  
 
-#### **Why do I need to specify if I used a power meter or not??**
-The .tcx files are structured differently when you use a power meter than when you don't. You have to select the Yes or No so the app processes the data correctly. 
-<br>  
-
-#### **Why do I need to upload a file at all? Why can't this connect to Strava or Garmin Connect??**
+### **Why do I need to upload a file at all? Why can't this connect to Strava or Garmin Connect?**
 This might be possible in the future! Currently I don't know how to extract anything other than ride summary statistics from Strava and Garmin Connect's API has an insane fee of $5,000.
-
-[How to download a .tcx file from Garmin Connect](https://support.strava.com/hc/en-us/articles/216917807-Exporting-files-from-Garmin-Connect)
-
-[How to download a .tcx file from Strava](https://support.strava.com/hc/en-us/articles/216918437-Exporting-your-Data-and-Bulk-Export#TCX)
-
-
