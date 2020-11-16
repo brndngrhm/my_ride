@@ -200,7 +200,12 @@ Row
 ```{r}
 renderHighchart({
   
-  validate(need(input$file_upload != "", "Upload a FIT file - This app displays power, heart rate, cadence, or speed of your ride. If any intervals are detected, this app also displays the average power, heart rate, cadence, or speed in these intervals."))
+  validate(need(input$file_upload != "","
+- Upload a FIT file.
+- The app will display power, heart rate, cadence, or speed of your ride. 
+- If any intervals are detected, this app will also display the average power, heart rate, cadence, or speed in these intervals.
+- Large files take longer to process.
+"))
   
   validate(
     need(sum(selected_value()$metric_avg, na.rm = T) > 0, 
