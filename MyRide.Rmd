@@ -16,15 +16,6 @@ output:
 runtime: shiny
 ---
 
-<!-- <style>    -->
-
-<!-- .navbar { -->
-<!-- background-color:#272822; -->
-<!-- border-color:#f92672; -->
-<!-- } -->
-
-<!-- </style>  -->
-
 ```{r setup, include=FALSE}
 library(dplyr)
 library(lubridate)
@@ -41,6 +32,7 @@ library(xml2)
 library(tidyr)
 library(FITfileR)
 library(imputeTS)
+library(slider)
 ```
 
 Analysis
@@ -60,6 +52,10 @@ fileInput(inputId = "file_upload",
           accept = c(".fit"),
           placeholder = ".fit format only")
 
+actionButton(inputId = "go", label = "Analyze", width = '100%', icon = icon("fa-chart-line"))
+
+shiny::hr()
+
 radioButtons(inputId = "measure_select",
              label = h4("Choose what you want to see"), 
              choices = c("heart_rate", "power", "cadence", "speed"),
@@ -71,7 +67,6 @@ sliderInput(inputId = "slider_select",
             max = 35,
             value = 15, 
             step = 1)
-
 ```
 
 ----------------------------
@@ -168,6 +163,21 @@ get_changepoints <- function(data, sensitivity){
   
 }
 
+get_normalized_power <- function(data){
+  
+  # calc based on: https://medium.com/critical-powers/formulas-from-training-and-racing-with-a-power-meter-2a295c661b46
+  
+  data %>%
+    mutate(window = floor_date(time, "30 seconds"), 
+           rolling_30s_avg = slide_index_dbl(metric_avg, window, mean, .before = seconds(30)),
+           rolling_avg_powered = rolling_30s_avg^4) %>%
+    ungroup() %>%
+    mutate(avg_powered_values = mean(rolling_avg_powered),
+           NP = avg_powered_values^0.25) %>%
+    pull(NP) %>%
+    unique()
+}
+
 ###################
 
 parsed_fit_file <- reactive({
@@ -179,7 +189,7 @@ parsed_fit_file <- reactive({
 })
 
 ride_data <- reactive({
-
+  
   get_minute_avgs(parsed_fit_file())
   
 })
@@ -192,12 +202,28 @@ changes <- reactive({
   get_changepoints(selected_value(), sensitivity = input$slider_select)
 })
 
+color <- reactive({
+  
+  colors <- tibble(value = c("cadence", "heart_rate", "power", "speed"),
+                   color = c("#66D9EF", "#F92672", '#A6E22E', '#AE81FF')
+  ) %>%
+    filter(value == input$measure_select) %>%
+    pull(color)
+  
+})
+
+normalized_power <- reactive({
+  get_normalized_power(
+    get_specific_value(ride_data(), "power"))
+})
+
 ```
 
 Row 
 ------------
 ### 
 ```{r}
+
 renderHighchart({
   
   validate(need(input$file_upload != "","
@@ -212,20 +238,24 @@ renderHighchart({
          paste("There's no", input$measure_select, "data to plot :( Please select another option on the sidebar", sep=" "))
   )
   
-  hchart(changes(), "line", hcaes(x = datetime_to_timestamp(time), y=round(metric_avg,0)), color = "#A6E22E",showInLegend = F, name = input$measure_select) %>%
+  normalized_power_label <- if(input$measure_select == "power"){normalized_power()} else {"Not Applicable"}
+  
+  subtitle <- if(input$measure_select == "power"){
+    paste("Overall Avg:", round(mean(changes()$metric_avg),2), " | Normalized:", round(mean(normalized_power_label),2))
+  } else {paste("Overall Avg:", round(mean(changes()$metric_avg),2))}
+  
+  hchart(changes(), "line", hcaes(x = datetime_to_timestamp(time), y=round(metric_avg,0)), color = color(), showInLegend = F, name = input$measure_select) %>%
     hc_add_series(changes(), "line", hcaes(x = datetime_to_timestamp(time), y=round(mean)),
                   color = "#1E90FF", showInLegend = T, name = "Region Average") %>%
-    # hc_plotOptions("Region Average" = list(lineWidth = 5)) %>%
     hc_add_theme(hc_theme_monokai()) %>%
     hc_tooltip(shared = T) %>%
     hc_title(text = paste("Changepoint Analysis:", input$measure_select),
              align = "left") %>%
-    hc_subtitle(text = if(input$measure_select == "Distance"){paste("Total Distance:", max(round(changes()$avg,0)), sep=" ")}
-                else{paste("Overall Mean:", round(mean(changes()$metric_avg),2), sep=" ")},
+    hc_subtitle(text = subtitle,
                 align = "left") %>%
     hc_xAxis(title = list(text = "time"),
              type = "datetime"
-             ) %>% 
+    ) %>% 
     hc_chart(zoomType = "x")
 })
 ```
@@ -271,7 +301,7 @@ renderHighchart({
          paste("There's no", input$measure_select, "data to plot :( Please select another option on the sidebar", sep=" "))
   )
   
-  hchart(selected_value()$metric_avg) %>%
+  hchart(selected_value()$metric_avg, color = color()) %>%
     hc_add_theme(hc_theme_monokai()) %>%
     hc_title(text = input$measure_select,
              align = "left") %>%
