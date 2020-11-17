@@ -33,6 +33,8 @@ library(tidyr)
 library(FITfileR)
 library(imputeTS)
 library(slider)
+library(shinycssloaders)
+library(shinyWidgets)
 ```
 
 Analysis
@@ -47,14 +49,24 @@ Sidebar {.sidebar}
 options(shiny.maxRequestSize=30*1024^2) 
 
 fileInput(inputId = "file_upload", 
-          label = h4("Upload a FIT file"),
+          label = h4("Upload a FIT file to get started"),
           multiple = FALSE,
           accept = c(".fit"),
           placeholder = ".fit format only")
 
-actionButton(inputId = "go", label = "Analyze", width = '100%', icon = icon("fa-chart-line"))
 
-shiny::hr()
+observeEvent(input$file_upload, {
+  show_alert(
+      title = "MyRide",
+      text = tags$span(
+        "The app will display power, heart rate, cadence, or speed of your ride.",
+         tags$br(),
+        "If any intervals are detected, this app will also display the",  tags$em("average"), "power, heart rate, cadence, or speed in these intervals.",
+         tags$br(),
+        tags$em("note that large files take longer to process.")),
+      html = TRUE, width = "80%"
+    )
+  })
 
 radioButtons(inputId = "measure_select",
              label = h4("Choose what you want to see"), 
@@ -68,8 +80,6 @@ sliderInput(inputId = "slider_select",
             value = 15, 
             step = 1)
 ```
-
-----------------------------
 
 ```{r}
 #sometimes data is read in as multiple records, fomrming a list. in that case we need to bind them together to 1 dataframe
@@ -182,6 +192,8 @@ get_normalized_power <- function(data){
 
 parsed_fit_file <- reactive({
   
+  validate(need(input$file_upload != "","Upload a .fit file to get started"))
+  
   infile <- input$file_upload
   
   parse_fit_file(infile$datapath)
@@ -195,6 +207,7 @@ ride_data <- reactive({
 })
 
 selected_value <- reactive({
+  
   get_specific_value(ride_data(),  input$measure_select)
 })
 
@@ -219,25 +232,14 @@ normalized_power <- reactive({
 
 ```
 
-Row 
-------------
-### 
 ```{r}
-
-renderHighchart({
-  
-  validate(need(input$file_upload != "","
-- Upload a FIT file.
-- The app will display power, heart rate, cadence, or speed of your ride. 
-- If any intervals are detected, this app will also display the average power, heart rate, cadence, or speed in these intervals.
-- Large files take longer to process.
-"))
+output$changepoint_plot <- renderHighchart({
   
   validate(
-    need(sum(selected_value()$metric_avg, na.rm = T) > 0, 
+    need(sum(selected_value()$metric_avg, na.rm = T) > 0,
          paste("There's no", input$measure_select, "data to plot :( Please select another option on the sidebar", sep=" "))
   )
-  
+
   normalized_power_label <- if(input$measure_select == "power"){normalized_power()} else {"Not Applicable"}
   
   subtitle <- if(input$measure_select == "power"){
@@ -257,12 +259,10 @@ renderHighchart({
              type = "datetime"
     ) %>% 
     hc_chart(zoomType = "x")
+  
+  
 })
-```
-
-###
-```{r}
-renderHighchart({
+output$overlay_plot <- renderHighchart({
   
   validate(need(input$file_upload != "", " "))
   
@@ -285,14 +285,7 @@ renderHighchart({
     hc_yAxis(title = list(text = " ")) %>%
     hc_chart(zoomType = "x")
 })
-```
-
-Row
-----------
-
-### 
-```{r}
-renderHighchart({
+output$histogram <- renderHighchart({
   
   validate(need(input$file_upload != "", " "))
   
@@ -309,11 +302,7 @@ renderHighchart({
     hc_legend(enabled = FALSE)
   
 })
-```
-
-###
-```{r}
-renderLeaflet({
+output$map <- renderLeaflet({
   
   validate(need(input$file_upload != "", " "))
   
@@ -337,6 +326,18 @@ renderLeaflet({
                           stroke = TRUE, 
                           fillOpacity = 0)
 })
+```
+
+Row
+------------
+###
+```{r}
+fluidPage(
+      fluidRow(column(6, highchartOutput("changepoint_plot")),
+               column(6, highchartOutput("overlay_plot"))),
+      fluidRow(column(6, highchartOutput("histogram")),
+               column(6, leafletOutput("map")))
+)
 ```
 
 About
