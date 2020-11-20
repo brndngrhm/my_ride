@@ -82,7 +82,7 @@ sliderInput(inputId = "slider_select",
 ```
 
 ```{r}
-#sometimes data is read in as multiple records, fomrming a list. in that case we need to bind them together to 1 dataframe
+#sometimes data is read in as multiple records, forming a list. in that case we need to bind them together to 1 data frame
 parse_fit_file <- function(data){
   
   fit_file <- FITfileR::readFitFile(data)
@@ -332,11 +332,12 @@ Row
 ------------
 ###
 ```{r}
+
 fluidPage(
-      fluidRow(column(6, highchartOutput("changepoint_plot")),
-               column(6, highchartOutput("overlay_plot"))),
-      fluidRow(column(6, highchartOutput("histogram")),
-               column(6, leafletOutput("map")))
+  fluidRow(column(6, highchartOutput("changepoint_plot")),
+           column(6, highchartOutput("overlay_plot"))),
+  fluidRow(column(6, highchartOutput("histogram")),
+           column(6, leafletOutput("map")))
 )
 ```
 
