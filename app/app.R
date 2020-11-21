@@ -11,7 +11,6 @@ library(changepoint)
 library(highcharter)
 library(leaflet)
 library(shinythemes)
-library(here)
 
 #increase max file size allowed 
 options(shiny.maxRequestSize = 30 * 1024 ^ 2)

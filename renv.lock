@@ -574,6 +574,13 @@
       "Repository": "CRAN",
       "Hash": "03446ed0b8129916f73676726cb3c48f"
     },
+    "profvis": {
+      "Package": "profvis",
+      "Version": "0.3.7",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "e9d21e79848e02e524bea6f5bd53e7e4"
+    },
     "promises": {
       "Package": "promises",
       "Version": "1.1.0",
