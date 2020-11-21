@@ -2,6 +2,7 @@ library(shinycssloaders)
 library(shinyWidgets)
 library(shiny)
 library(dplyr)
+library(tidyr)
 library(lubridate)
 library(FITfileR)
 library(imputeTS)
@@ -38,7 +39,7 @@ ui <- fluidPage(
                          selected = "power"),
             
             sliderInput(inputId = "slider_select",
-                        label = h4("If the blue line isn't lining up with your intervals, adjust the slider (See 'About' Tab for more info)"),
+                        label = h4("If the blue line isn't lining up with your intervals, adjust the slider (Click 'About & Help' for more info)"),
                         min = 0, 
                         max = 35,
                         value = 15, 
