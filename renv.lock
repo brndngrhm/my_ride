@@ -705,6 +705,13 @@
       "RemoteSha": "bc1bd7a8040a8343a0684678edbc1bc184e7723c",
       "Hash": "1fafba5672ffbc0009c4c4e7ba3e235c"
     },
+    "shinythemes": {
+      "Package": "shinythemes",
+      "Version": "1.1.2",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "8f047210d7d68ea4860a3c0d8cced272"
+    },
     "slider": {
       "Package": "slider",
       "Version": "0.1.5",

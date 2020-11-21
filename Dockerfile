@@ -38,4 +38,4 @@ RUN Rscript -e 'renv::restore()'
 EXPOSE 3838
 
 # run flexdashboard as localhost and on exposed port in Docker container
-CMD ["R", "-e", "rmarkdown::run('/app/MyRide.Rmd', shiny_args = list(port = 3838, host = '0.0.0.0'))"]
+CMD ["R", "-e", "shiny::runApp('/app', host = '0.0.0.0', port = 3838)"]

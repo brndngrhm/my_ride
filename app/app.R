@@ -9,6 +9,7 @@ library(slider)
 library(changepoint)
 library(highcharter)
 library(leaflet)
+library(shinythemes)
 
 #increase max file size allowed 
 options(shiny.maxRequestSize=30*1024^2)
