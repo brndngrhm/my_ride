@@ -5,8 +5,8 @@ account: brndngrhm
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 348034
-bundleId: 1394180
+bundleId: 1437746
 url: https://brndngrhm.shinyapps.io/MyRide/
-when: 1527342530.38116
+when: 1529427810.27091
 asMultiple: FALSE
 asStatic: FALSE
