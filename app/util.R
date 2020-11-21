@@ -37,32 +37,23 @@ parse_fit_file <- function(data){
   
 }
 
-# minute averages of all numeric variables
-get_minute_avgs <- function(data){
-  
-  fit_file_formatted <- data %>%
-    as_tibble() %>%
-    mutate(timestamp = ymd_hms(timestamp) - hours(5), 
-           time = floor_date(timestamp, "1 second")) %>%
-    select(-accumulated_power) %>%
-    group_by(time) %>%
-    summarise(across(where(is.numeric), ~mean(.x, na.rm = T))) %>%
-    mutate(count = 1,
-           ride_min = cumsum(count)
-    )
-  
-  return(fit_file_formatted)
-  
-}
-
 # lets you select 1 variable at a time 
 get_specific_value <- function(data, value){
   
   vars <- c("time", "ride_min", {{value}})
   
   data %>%
+    as_tibble() %>%
+    mutate(timestamp = ymd_hms(timestamp) - hours(5), 
+           time = floor_date(timestamp, "1 second")) %>%
+    # select(-accumulated_power) %>%
+    arrange(time) %>%
+    # summarise(across(where(is.numeric), ~mean(.x, na.rm = T))) %>%
+    mutate(count = 1,
+           ride_min = cumsum(count)
+    ) %>%
     select(one_of(vars)) %>% 
-    rename(metric_avg = 3)
+    rename(metric_avg = 3) 
 }
 
 # does changepoint analysis on a variable
@@ -75,22 +66,13 @@ get_changepoints <- function(data, sensitivity){
                       Q = sensitivity,
                       penalty = "SIC")
   
-  #store breakpoints in a dataframe
-  changepoints <- data.frame("ride_min" = cpts(cp_mean),
-                             changes = seq(1, length(cpts(cp_mean)), 1))
+  changepoint_seconds <- cpts(cp_mean)
   
-  #join breakpoints to formatted data, fill in the gaps
-  data <- left_join(data, changepoints, by = "ride_min") %>%
-    tidyr::fill(changes, .direction = "downup") 
-  
-  #calculate the mean within each segment, as identified by the changepoints
-  changepoint_mean <- data %>%
+ data %>%
+    mutate(changes = ifelse(ride_min %in% changepoint_seconds, ride_min, NA_real_)) %>%
+    tidyr::fill(changes, .direction = "downup") %>%
     group_by(changes) %>%
-    summarise(mean = mean(metric_avg, na.rm = T))
-  
-  #join mean back to dataframe
-  left_join(data, changepoint_mean, by = "changes")
-  
+    mutate(mean = mean(metric_avg, na.rm = T))
 }
 
 get_normalized_power <- function(data){

@@ -7,7 +7,6 @@ profvis({
   prof_output = 'app/profile_results/'
 )
 
-
 # Assign to variable
 p <- profvis(prof_input = 'app/profile_results/file70004ed374c7.Rprof')
 

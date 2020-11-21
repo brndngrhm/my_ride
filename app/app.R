@@ -15,9 +15,7 @@ library(shinythemes)
 #increase max file size allowed 
 options(shiny.maxRequestSize=30*1024^2)
 
-# Define UI for application that draws a histogram
 ui <- fluidPage(
-    
     theme = shinytheme("slate"),
     
     # Application title
@@ -48,7 +46,7 @@ ui <- fluidPage(
             shiny::actionButton(inputId = "about", label = "About & Help", width = "100%")
         ),
         
-        # Show a plot of the generated distribution
+        # main page plots
         mainPanel(width = 10,
             fluidPage(
                 tags$head(tags$style(HTML("a {color: steelblue}"))),
@@ -61,12 +59,11 @@ ui <- fluidPage(
     )
 )
 
-# Define server logic required to draw a histogram
 server <- function(input, output) {
     
     source("util.R")
     
-    # get values based on user uplaod
+    # get values based on user upload
     parsed_fit_file <- reactive({
         
         validate(need(input$file_upload != "","Upload a .fit file to get started"))
@@ -77,16 +74,8 @@ server <- function(input, output) {
         
     })
     
-    ride_data <- reactive({
-        
-        get_minute_avgs(parsed_fit_file())
-        
-    })
-    
     selected_value <- reactive({
-        
-        get_specific_value(ride_data(),  input$measure_select)
-        
+        get_specific_value(parsed_fit_file(),  input$measure_select)
     })
     
     changes <- reactive({
@@ -105,7 +94,7 @@ server <- function(input, output) {
     
     normalized_power <- reactive({
         get_normalized_power(
-            get_specific_value(ride_data(), "power"))
+            get_specific_value(parsed_fit_file(), "power"))
     })
     
     ######################################
@@ -146,9 +135,12 @@ server <- function(input, output) {
         
         cols <- c("#66D9EF", "#F92672", '#A6E22E', '#AE81FF')
         
-        ride_data() %>%
+        parsed_fit_file() %>%
+            mutate(timestamp = ymd_hms(timestamp) - hours(5), 
+                   time = floor_date(timestamp, "1 second")) %>%
+            arrange(time) %>%
             select(one_of(my_vars)) %>%
-            pivot_longer(cols = 2:ncol(.)) %>%
+            pivot_longer(cols = c("cadence", "heart_rate", "power", "speed")) %>%
             hchart(., "line", hcaes(x = datetime_to_timestamp(time), y = round(value,0), group = name), showInLegend = T) %>%
             hc_colors(cols) %>%
             hc_add_theme(hc_theme_monokai()) %>%
@@ -183,11 +175,11 @@ server <- function(input, output) {
         validate(need(input$file_upload != "", " "))
         
         validate(
-            need(sum(ride_data()$position_lat, na.rm = T) > 0, 
+            need(sum(parsed_fit_file()$position_lat, na.rm = T) > 0, 
                  "")
         )
         
-        coords <- ride_data() %>%
+        coords <- parsed_fit_file() %>%
             select(starts_with("position"))
         
         leaflet(coords) %>%
