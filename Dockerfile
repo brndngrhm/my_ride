@@ -24,7 +24,7 @@ RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get clean
 
-# copy renv.lock file
+# copy renv.lock file   
 COPY renv.lock ./renv.lock
 
 # make directory and copy Rmarkdown flexdashboard file in it
