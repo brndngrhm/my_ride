@@ -1,30 +1,14 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-
-library(dplyr)
-library(lubridate)
-library(stringr)
-library(tidyr)
-library(changepoint)
-library(zoo)
-library(flexdashboard)
-library(highcharter)
-library(shiny)
-library(leaflet)
-library(XML) 
-library(xml2)
-library(tidyr)
-library(FITfileR)
-library(imputeTS)
-library(slider)
 library(shinycssloaders)
 library(shinyWidgets)
 library(shiny)
+library(dplyr)
+library(lubridate)
+library(FITfileR)
+library(imputeTS)
+library(slider)
+library(changepoint)
+library(highcharter)
+library(leaflet)
 
 #increase max file size allowed 
 options(shiny.maxRequestSize=30*1024^2)
