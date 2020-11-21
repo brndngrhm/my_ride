@@ -5,4 +5,7 @@
 *.tcx
 *.html
 *.fit
+*.md
 function_test.R
+activities/
+misc/
