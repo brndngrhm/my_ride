@@ -104,7 +104,7 @@ server <- function(input, output) {
     normalized_power <-
         reactive({
             get_normalized_power(
-                get_specific_value(parsed_fit_file(), "power"))
+                get_metric(parsed_fit_file(), "power"))
         })
     
     ######################################
