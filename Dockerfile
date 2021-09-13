@@ -19,7 +19,7 @@ RUN apt-get update -qq && apt-get -y --no-install-recommends install \
     libcurl4-openssl-dev \
     libssl-dev
 
-## update system libraries
+## update system libraries`
 RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get clean
@@ -35,7 +35,7 @@ RUN Rscript -e 'install.packages("renv")'
 RUN Rscript -e 'renv::restore()'
 
 # expose port on Docker container
-EXPOSE 3838
+EXPOSE 8080
 
-# run flexdashboard as localhost and on exposed port in Docker container
-CMD ["R", "-e", "shiny::runApp('/app', host = '0.0.0.0', port = 3838)"]
+# run app as localhost and on exposed port in Docker container
+CMD ["R", "-e", "shiny::runApp('/app/app.R', host = '0.0.0.0', port = 8080)"]
